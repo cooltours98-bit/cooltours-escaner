@@ -1,0 +1,140 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Escáner QR | CoolTours-GDL</title>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f3f4f6;
+      color: #222;
+      margin: 0;
+      padding: 20px;
+      text-align: center;
+    }
+    .card {
+      max-width: 480px;
+      margin: 20px auto;
+      background: white;
+      padding: 22px;
+      border-radius: 16px;
+      box-shadow: 0 3px 14px #0001;
+    }
+    h1 { color: #e87524; font-size: 25px; }
+    p { line-height: 1.5; }
+    button {
+      background: #e87524;
+      color: white;
+      border: 0;
+      border-radius: 10px;
+      padding: 14px 20px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      margin: 6px;
+    }
+    button.secondary { background: #333; }
+    #reader { width: 100%; margin: 18px auto; }
+    #status { font-weight: bold; margin-top: 15px; }
+    .small { font-size: 13px; color: #666; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>COOLTOURS-GDL</h1>
+    <h2>Escáner de boletos QR</h2>
+    <p>Escanea el código QR del viajero para continuar con su check-in.</p>
+
+    <button id="startBtn" onclick="startScanner()">Activar cámara</button>
+    <button class="secondary" onclick="stopScanner()">Detener cámara</button>
+
+    <div id="reader"></div>
+    <p id="status">Cámara sin activar.</p>
+    <p class="small">Permite el acceso a la cámara cuando Chrome lo solicite.</p>
+  </div>
+
+  <script>
+    let scanner = null;
+    let processing = false;
+
+    function setStatus(message) {
+      document.getElementById('status').textContent = message;
+    }
+
+    async function startScanner() {
+      if (scanner) return;
+
+      if (!window.Html5Qrcode) {
+        setStatus('No se pudo cargar el lector QR. Revisa tu conexión.');
+        return;
+      }
+
+      try {
+        scanner = new Html5Qrcode('reader');
+        const cameras = await Html5Qrcode.getCameras();
+
+        if (!cameras || cameras.length === 0) {
+          scanner = null;
+          setStatus('No se encontró una cámara disponible.');
+          return;
+        }
+
+        const camera = cameras.find(c =>
+          /back|rear|environment|trasera|posterior/i.test(c.label)
+        ) || cameras[cameras.length - 1];
+
+        await scanner.start(
+          camera.id,
+          { fps: 10, qrbox: { width: 250, height: 250 } },
+          onScanSuccess,
+          () => {}
+        );
+
+        setStatus('Cámara activa. Enfoca el código QR del boleto.');
+        document.getElementById('startBtn').disabled = true;
+      } catch (error) {
+        scanner = null;
+        setStatus('No se pudo abrir la cámara: ' + (error.message || error));
+      }
+    }
+
+    async function stopScanner() {
+      if (!scanner) return;
+
+      try {
+        if (scanner.isScanning) await scanner.stop();
+        await scanner.clear();
+      } catch (error) {}
+
+      scanner = null;
+      processing = false;
+      document.getElementById('startBtn').disabled = false;
+      setStatus('Cámara detenida.');
+    }
+
+    async function onScanSuccess(decodedText) {
+      if (processing) return;
+      processing = true;
+      setStatus('Código leído. Preparando el check-in...');
+
+      await stopScanner();
+
+      // Por seguridad, mostramos el contenido para verificar
+      // el formato antes de conectarlo con el sistema de boletos.
+      const result = document.createElement('div');
+      result.style.cssText = 'overflow-wrap:anywhere;padding:12px;background:#fff3e8;border-radius:8px;margin-top:12px;';
+      result.textContent = 'QR leído: ' + decodedText;
+
+      const old = document.getElementById('scanResult');
+      if (old) old.remove();
+      result.id = 'scanResult';
+      document.querySelector('.card').appendChild(result);
+
+      setStatus('Lectura correcta. Falta conectar la validación con el sistema de check-in.');
+    }
+  </script>
+</body>
+</html>
