@@ -1,0 +1,1 @@
+# cooltours-escaner
