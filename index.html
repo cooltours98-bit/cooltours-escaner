@@ -5,9 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Escáner QR | CoolTours-GDL</title>
-
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -17,7 +15,6 @@
       padding: 20px;
       text-align: center;
     }
-
     .card {
       max-width: 480px;
       margin: 20px auto;
@@ -26,16 +23,8 @@
       border-radius: 16px;
       box-shadow: 0 3px 14px #0001;
     }
-
-    h1 {
-      color: #e87524;
-      font-size: 25px;
-    }
-
-    p {
-      line-height: 1.5;
-    }
-
+    h1 { color: #e87524; font-size: 25px; }
+    p { line-height: 1.5; }
     button {
       background: #e87524;
       color: white;
@@ -47,62 +36,37 @@
       cursor: pointer;
       margin: 6px;
     }
-
-    button.secondary {
-      background: #333;
-    }
-
-    button:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-    }
-
-    #reader {
-      width: 100%;
-      margin: 18px auto;
-    }
-
-    .small {
-      font-size: 13px;
-      color: #666;
-    }
-
-    #status {
-      overflow-wrap: anywhere;
-    }
+    button.secondary { background: #333; }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    #reader { width: 100%; margin: 18px auto; }
+    .small { font-size: 13px; color: #666; }
+    #status { overflow-wrap: anywhere; }
   </style>
 </head>
-
 <body>
   <div class="card">
     <h1>COOLTOURS-GDL</h1>
     <h2>Escáner de boletos QR</h2>
+    <p>Escanea el código QR del viajero para continuar con su check-in.</p>
 
-    <p>
-      Escanea el código QR del viajero para continuar con su check-in.
-    </p>
-
-    <button id="startBtn" onclick="startScanner()">
-      Activar cámara
-    </button>
-
-    <button class="secondary" onclick="stopScanner()">
-      Detener cámara
-    </button>
+    <button id="startBtn" onclick="startScanner()">Activar cámara</button>
+    <button class="secondary" onclick="stopScanner()">Detener cámara</button>
 
     <div id="reader"></div>
-
     <p id="status">Cámara sin activar.</p>
-
-    <p class="small">
-      Permite el acceso a la cámara cuando Chrome lo solicite.
-    </p>
+    <p class="small">Permite el acceso a la cámara cuando Chrome lo solicite.</p>
   </div>
 
   <script>
     const params = new URLSearchParams(window.location.search);
-    const appUrl = params.get('appUrl');
-    const vehiculo = params.get('vehiculo') || '';
+
+    // URL de check-in: primero se intenta leer desde la dirección.
+    const appUrlRecibida = params.get('appUrl');
+    const URL_CHECKIN =
+      'https://script.google.com/macros/s/AKfycbzWv16ZvBUL0gpq0FUlsUKvfRmfMXkk_uJDFyaaQKn-aEwjr9nuIjmanvFKT_oa0QYy8w/exec';
+
+    const appUrl = appUrlRecibida || URL_CHECKIN;
+    const vehiculo = params.get('vehiculo') || 'Autobús';
 
     let scanner = null;
     let processing = false;
@@ -112,19 +76,17 @@
     }
 
     async function startScanner() {
-      if (scanner) return;
+      if (scanner || processing) return;
 
-      if (!appUrl) {
-        setStatus(
-          'Abre el escáner desde el botón de la aplicación de check-in.'
-        );
+      if (!window.isSecureContext ||
+          !navigator.mediaDevices ||
+          !navigator.mediaDevices.getUserMedia) {
+        setStatus('Abre esta página mediante HTTPS y permite el acceso a la cámara.');
         return;
       }
 
       if (!window.Html5Qrcode) {
-        setStatus(
-          'No se pudo cargar el lector QR. Revisa tu conexión.'
-        );
+        setStatus('No se pudo cargar el lector QR. Revisa tu conexión.');
         return;
       }
 
@@ -134,48 +96,30 @@
 
       try {
         scanner = new Html5Qrcode('reader');
-
         const cameras = await Html5Qrcode.getCameras();
 
         if (!cameras || cameras.length === 0) {
-          scanner = null;
-          setStatus('No se encontró una cámara disponible.');
-          button.disabled = false;
-          button.textContent = 'Activar cámara';
-          return;
+          throw new Error('No se encontró una cámara disponible.');
         }
 
         const camera =
-          cameras.find(c =>
-            /back|rear|environment|trasera|posterior/i.test(c.label)
-          ) || cameras[cameras.length - 1];
+          cameras.find(c => /back|rear|environment|trasera|posterior/i.test(c.label))
+          || cameras[cameras.length - 1];
 
         await scanner.start(
           camera.id,
-          {
-            fps: 10,
-            qrbox: { width: 250, height: 250 }
-          },
+          { fps: 10, qrbox: { width: 250, height: 250 } },
           onScanSuccess,
           () => {}
         );
 
-        setStatus(
-          'Cámara activa. Enfoca el código QR del boleto.'
-        );
-
         button.textContent = 'Cámara activa';
-
+        setStatus('Cámara activa. Enfoca el código QR del boleto.');
       } catch (error) {
         scanner = null;
-
-        setStatus(
-          'No se pudo abrir la cámara: ' +
-          (error.message || error)
-        );
-
         button.disabled = false;
         button.textContent = 'Activar cámara';
+        setStatus('No se pudo abrir la cámara: ' + (error.message || error));
       }
     }
 
@@ -185,42 +129,38 @@
 
       try {
         if (current) {
-          if (current.isScanning) {
-            await current.stop();
-          }
-
+          if (current.isScanning) await current.stop();
           await current.clear();
         }
       } catch (error) {}
 
       document.getElementById('reader').innerHTML = '';
 
-      document.getElementById('startBtn').disabled = false;
-      document.getElementById('startBtn').textContent = 'Activar cámara';
+      const button = document.getElementById('startBtn');
+      button.disabled = false;
+      button.textContent = 'Activar cámara';
 
-      if (!processing) {
-        setStatus('Cámara detenida.');
-      }
+      if (!processing) setStatus('Cámara detenida.');
     }
 
     async function onScanSuccess(decodedText) {
       if (processing) return;
-
       processing = true;
 
-      setStatus(
-        'Código leído. Regresando al sistema para validar el boleto...'
-      );
-
+      setStatus('Código leído. Regresando al sistema para validar el boleto...');
       await stopScanner();
 
-      const separator = appUrl.includes('?') ? '&' : '?';
+      try {
+        const destination = new URL(appUrl);
+        destination.searchParams.set('page', 'checkin');
+        destination.searchParams.set('token', String(decodedText || '').trim());
+        destination.searchParams.set('vehiculo', vehiculo);
 
-      const destination = appUrl + separator +
-        'token=' + encodeURIComponent(decodedText) +
-        '&vehiculo=' + encodeURIComponent(vehiculo);
-
-      window.location.href = destination;
+        window.location.href = destination.toString();
+      } catch (error) {
+        processing = false;
+        setStatus('Error al regresar al check-in: ' + (error.message || error));
+      }
     }
   </script>
 </body>
